@@ -41,6 +41,8 @@ import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { io } from 'socket.io-client';
 import QRCode from 'qrcode';
 
+const API_URL = import.meta.env.VITE_API_URL || '';
+
 // --- Types ---
 interface User {
   id: number;
@@ -272,18 +274,18 @@ const MenuChatbot: React.FC<{ token: string }> = ({ token }) => {
   useEffect(() => { if (selectedMenu) fetchOptions(selectedMenu.id); }, [selectedMenu]);
 
   const fetchMenus = async () => {
-    const res = await fetch('/api/menus', { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(API_URL + '/api/menus', { headers: { 'Authorization': `Bearer ${token}` } });
     setMenus(await res.json());
   };
 
   const fetchOptions = async (menuId: number) => {
-    const res = await fetch(`/api/menus/${menuId}/options`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(API_URL + `/api/menus/${menuId}/options`, { headers: { 'Authorization': `Bearer ${token}` } });
     setOptions(await res.json());
   };
 
   const handleAddMenu = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/menus', {
+    const res = await fetch(API_URL + '/api/menus', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ name: menuName, welcome_text: welcomeText, is_main: isMain, enabled: true })
@@ -300,7 +302,7 @@ const MenuChatbot: React.FC<{ token: string }> = ({ token }) => {
   const handleAddOption = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMenu) return;
-    const res = await fetch(`/api/menus/${selectedMenu.id}/options`, {
+    const res = await fetch(API_URL + `/api/menus/${selectedMenu.id}/options`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({
@@ -324,20 +326,20 @@ const MenuChatbot: React.FC<{ token: string }> = ({ token }) => {
 
   const deleteMenu = async (id: number) => {
     if (!confirm('Are you sure? This will delete all options in this menu.')) return;
-    await fetch(`/api/menus/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    await fetch(API_URL + `/api/menus/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
     if (selectedMenu?.id === id) setSelectedMenu(null);
     fetchMenus();
   };
 
   const deleteOption = async (id: number) => {
-    await fetch(`/api/options/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    await fetch(API_URL + `/api/options/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
     if (selectedMenu) fetchOptions(selectedMenu.id);
   };
 
   const handleReorder = async (newOptions: MenuOption[]) => {
     setOptions(newOptions);
     if (selectedMenu) {
-      await fetch(`/api/menus/${selectedMenu.id}/reorder`, {
+      await fetch(API_URL + `/api/menus/${selectedMenu.id}/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ options: newOptions })
@@ -395,7 +397,7 @@ const MenuChatbot: React.FC<{ token: string }> = ({ token }) => {
                       {selectedMenu.is_main === 0 && (
                         <button 
                           onClick={async () => {
-                            await fetch(`/api/menus/${selectedMenu.id}`, {
+                            await fetch(API_URL + `/api/menus/${selectedMenu.id}`, {
                               method: 'PUT',
                               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                               body: JSON.stringify({ ...selectedMenu, is_main: true })
@@ -571,23 +573,30 @@ const AuthPage: React.FC<{ onAuth: (token: string, user: User) => void }> = ({ o
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+    const API_URL = import.meta.env.VITE_API_URL || '';
+    const endpoint = `${API_URL}${isLogin ? '/api/auth/login' : '/api/auth/register'}`;
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      const data = await res.json();
-      if (res.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        onAuth(data.token, data.user);
+      
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (res.ok) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          onAuth(data.token, data.user);
+        } else {
+          setError(data.message || 'Authentication failed');
+        }
       } else {
-        setError(data.message);
+        setError('Server error: The backend is not responding correctly. If you are on Netlify, please note that this app requires a separate Node.js backend.');
       }
     } catch (err) {
-      setError('Connection failed');
+      setError('Connection failed. Please check if your backend server is running.');
     }
   };
 
@@ -655,7 +664,7 @@ const Dashboard: React.FC<{ user: User, token: string, onNavigate: (tab: string)
     fetchStatus();
     fetchStats();
 
-    const socket = io();
+    const socket = io(API_URL || window.location.origin);
     socket.on(`qr-${user.id}`, async (qr) => {
       const url = await QRCode.toDataURL(qr);
       setQrCode(url);
@@ -671,7 +680,8 @@ const Dashboard: React.FC<{ user: User, token: string, onNavigate: (tab: string)
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/api/whatsapp/status', { headers: { 'Authorization': `Bearer ${token}` } });
+      const API_URL = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${API_URL}/api/whatsapp/status`, { headers: { 'Authorization': `Bearer ${token}` } });
       const data = await res.json();
       setStatus(data.status);
     } catch (e) {}
@@ -679,7 +689,8 @@ const Dashboard: React.FC<{ user: User, token: string, onNavigate: (tab: string)
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/stats', { headers: { 'Authorization': `Bearer ${token}` } });
+      const API_URL = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${API_URL}/api/stats`, { headers: { 'Authorization': `Bearer ${token}` } });
       const data = await res.json();
       setStats(data);
       setLoading(false);
@@ -690,7 +701,8 @@ const Dashboard: React.FC<{ user: User, token: string, onNavigate: (tab: string)
 
   const handleConnect = async () => {
     setStatus('connecting');
-    await fetch('/api/whatsapp/connect', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+    const API_URL = import.meta.env.VITE_API_URL || '';
+    await fetch(`${API_URL}/api/whatsapp/connect`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
   };
 
   return (
@@ -836,13 +848,13 @@ const ChatbotBuilder: React.FC<{ token: string }> = ({ token }) => {
   useEffect(() => { fetchRules(); }, []);
 
   const fetchRules = async () => {
-    const res = await fetch('/api/rules', { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(API_URL + '/api/rules', { headers: { 'Authorization': `Bearer ${token}` } });
     setRules(await res.json());
   };
 
   const handleAddRule = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/rules', {
+    const res = await fetch(API_URL + '/api/rules', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ keyword, reply })
@@ -856,7 +868,7 @@ const ChatbotBuilder: React.FC<{ token: string }> = ({ token }) => {
   };
 
   const handleDelete = async (id: number) => {
-    await fetch(`/api/rules/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    await fetch(API_URL + `/api/rules/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
     fetchRules();
   };
 
@@ -943,7 +955,7 @@ const BookingsList: React.FC<{ token: string }> = ({ token }) => {
   const [bookings, setBookings] = useState<Booking[]>([]);
 
   useEffect(() => {
-    fetch('/api/bookings', { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch(API_URL + '/api/bookings', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.json())
       .then(setBookings);
   }, []);
@@ -1005,13 +1017,13 @@ const BroadcastMarketing: React.FC<{ token: string }> = ({ token }) => {
   }, []);
 
   const fetchContacts = () => {
-    fetch('/api/contacts', { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch(API_URL + '/api/contacts', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.json())
       .then(setContacts);
   };
 
   const fetchCampaigns = () => {
-    fetch('/api/campaigns', { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch(API_URL + '/api/campaigns', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.json())
       .then(setCampaigns);
   };
@@ -1021,7 +1033,7 @@ const BroadcastMarketing: React.FC<{ token: string }> = ({ token }) => {
     setIsSending(true);
     
     // Create campaign first
-    const res = await fetch('/api/campaigns', {
+    const res = await fetch(API_URL + '/api/campaigns', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ name: campaignName, content: message })
@@ -1029,7 +1041,7 @@ const BroadcastMarketing: React.FC<{ token: string }> = ({ token }) => {
     const campaign = await res.json();
 
     // Send it
-    await fetch(`/api/campaigns/${campaign.id}/send`, {
+    await fetch(API_URL + `/api/campaigns/${campaign.id}/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ phones: selected })
@@ -1319,14 +1331,14 @@ const ContactsList: React.FC<{ token: string }> = ({ token }) => {
   }, []);
 
   const fetchContacts = () => {
-    fetch('/api/contacts', { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch(API_URL + '/api/contacts', { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.json())
       .then(setContacts);
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this contact?')) return;
-    await fetch(`/api/contacts/${id}`, {
+    await fetch(API_URL + `/api/contacts/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -1433,14 +1445,14 @@ const TeamInbox: React.FC<{ token: string, user: User }> = ({ token, user }) => 
   }, [messages, selectedPhone]);
 
   const fetchMessages = async () => {
-    const res = await fetch('/api/messages', { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(API_URL + '/api/messages', { headers: { 'Authorization': `Bearer ${token}` } });
     setMessages(await res.json());
   };
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPhone || !replyText) return;
-    const res = await fetch('/api/messages/send', {
+    const res = await fetch(API_URL + '/api/messages/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ phone: selectedPhone, content: replyText })

@@ -1,0 +1,8 @@
+{
+  "name": "Copy of WhatsAuto SaaS",
+  "description": "A multi-user WhatsApp automation platform with chatbot builder, booking system, broadcast marketing, and team inbox.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

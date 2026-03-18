@@ -593,7 +593,8 @@ const AuthPage: React.FC<{ onAuth: (token: string, user: User) => void }> = ({ o
           setError(data.message || 'Authentication failed');
         }
       } else {
-        setError('Server error: The backend is not responding correctly. If you are on Netlify, please note that this app requires a separate Node.js backend.');
+        const text = await res.text();
+        setError(`Server error (${res.status}): ${text.substring(0, 100)}... If you are on Netlify, this app requires a separate Node.js backend.`);
       }
     } catch (err) {
       setError('Connection failed. Please check if your backend server is running.');
